@@ -4,13 +4,16 @@ python-dotenv==1.0.1
 pydantic==2.8.2
 python-multipart==0.0.9
 
-# AI/CV pipeline - added incrementally as Phase 4 implements each service.
-# Pinned loosely here so `pip install -r requirements.txt` succeeds in
-# Phase 1 without requiring model weights or API keys yet.
+# AI/CV pipeline
 mediapipe==0.10.35
 numpy==1.26.4
 opencv-python-headless==4.10.0.84
 
-# External AI API clients (used in Phase 4)
-openai==1.35.10
+# Used by gemini_service (REST) and ollama fallback
 httpx==0.27.0
+
+# Local, free speech-to-text (replaces OpenAI Whisper API)
+faster-whisper==1.0.3
+
+# Local, free text-to-speech (replaces ElevenLabs)
+piper-tts==1.2.0
