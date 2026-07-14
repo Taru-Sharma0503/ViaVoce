@@ -44,8 +44,8 @@ def log_provider_status():
     # Visibility during demo setup - which AI providers are actually
     # live vs. running on fallback behavior.
     print(f"[startup] Gemini configured: {bool(settings.GEMINI_API_KEY)}")
-    print(f"[startup] Whisper configured: {bool(settings.WHISPER_API_KEY)}")
-    print(f"[startup] TTS configured: {bool(settings.TTS_API_KEY)} (provider={settings.TTS_PROVIDER})")
+    print("[startup] Whisper: Local Faster-Whisper")
+    print("[startup] TTS: Local Piper")
 
 
 @app.get("/")
