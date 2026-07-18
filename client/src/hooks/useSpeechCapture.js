@@ -25,25 +25,63 @@ export function useSpeechCapture(stream, onChunk, active) {
       ? 'audio/webm'
       : 'audio/ogg';
 
-    let recorder;
-    try {
-      recorder = new MediaRecorder(audioOnlyStream, { mimeType });
-    } catch (err) {
-      console.error('[useSpeechCapture] MediaRecorder init failed:', err.message);
-      return undefined;
-    }
+    let stopped = false;
+    let intervalId;
 
-    recorder.ondataavailable = async (event) => {
-      if (event.data.size === 0) return;
-      const base64 = await blobToBase64(event.data);
-      onChunk(base64);
+    // NOTE: we deliberately do NOT use `recorder.start(CHUNK_INTERVAL_MS)`
+    // (MediaRecorder's `timeslice` mode). That emits `dataavailable` every
+    // N ms, but those blobs are fragments of ONE continuous WebM/Opus
+    // stream - only the very first fragment contains the container header.
+    // Since each chunk here is sent independently to a stateless
+    // /process-audio endpoint and decoded on its own (see
+    // whisper_service.py's io.BytesIO(audio_bytes)), every fragment after
+    // the first has no header and fails to decode, so transcribe_audio()
+    // silently returns None for it. That's why captions would appear
+    // (at best) once and then stop.
+    //
+    // Instead, we start a brand-new MediaRecorder for every interval and
+    // call stop() to flush it. stop() always produces a single, complete,
+    // self-contained file (header included), so each chunk decodes fine
+    // on its own.
+    const recordOneChunk = () => {
+      if (stopped) return;
+
+      let recorder;
+      try {
+        recorder = new MediaRecorder(audioOnlyStream, { mimeType });
+      } catch (err) {
+        console.error('[useSpeechCapture] MediaRecorder init failed:', err.message);
+        return;
+      }
+
+      const localChunks = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) localChunks.push(event.data);
+      };
+
+      recorder.onstop = async () => {
+        if (localChunks.length === 0) return;
+        const blob = new Blob(localChunks, { type: mimeType });
+        const base64 = await blobToBase64(blob);
+        onChunk(base64);
+      };
+
+      recorder.start();
+      recorderRef.current = recorder;
+
+      setTimeout(() => {
+        if (recorder.state !== 'inactive') recorder.stop();
+      }, CHUNK_INTERVAL_MS);
     };
 
-    recorder.start(CHUNK_INTERVAL_MS);
-    recorderRef.current = recorder;
+    recordOneChunk();
+    intervalId = setInterval(recordOneChunk, CHUNK_INTERVAL_MS);
 
     return () => {
-      if (recorder.state !== 'inactive') recorder.stop();
+      stopped = true;
+      clearInterval(intervalId);
+      const current = recorderRef.current;
+      if (current && current.state !== 'inactive') current.stop();
     };
   }, [stream, onChunk, active]);
 }
